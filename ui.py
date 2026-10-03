@@ -56,6 +56,11 @@ from PyQt6.QtWidgets import (
     QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QProgressBar,
 )
 
+from core.i18n import localize_painter, localize_widgets, t as _t
+from memory.config_manager import get_language
+QLabel, QPushButton, QLineEdit = localize_widgets(QLabel, QPushButton, QLineEdit)
+QPainter = localize_painter(QPainter)
+
 try:
     from core.avatar import HoloAvatar
 except Exception:      # pragma: no cover — HUD must never die over cosmetics
@@ -1197,7 +1202,7 @@ class FileDropZone(QWidget):
 
     def _browse(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select a file for JARVIS", str(Path.home()),
+            self, _t("Select a file for JARVIS"), str(Path.home()),
             "All Files (*.*);;"
             "Images (*.jpg *.jpeg *.png *.gif *.webp *.bmp *.svg);;"
             "Documents (*.pdf *.docx *.txt *.md *.pptx);;"
@@ -2421,7 +2426,7 @@ class ClipboardPanel(QWidget):
                f"border: 1px solid {C.BORDER}; border-radius: 2px; }}"
                f"QPushButton:hover {{ color: {C.PRI}; border-color: {C.BORDER_B}; }}")
         for label, cmd_fmt in [
-            ("TRANSLATE", "Translate this text to English: {text}"),
+            ("TRANSLATE", f"Translate this text to {get_language()}: {{text}}"),
             ("SUMMARISE", "Summarise this: {text}"),
             ("EXPLAIN",   "Explain this: {text}"),
             ("FIX",       "Fix grammar and spelling: {text}"),
@@ -5755,7 +5760,7 @@ class JarvisUI:
         self._win._state_sig.emit(state)
 
     def write_log(self, text: str):
-        self._win._log_sig.emit(text)
+        self._win._log_sig.emit(_t(text))
 
     def wait_for_api_key(self):
         while not self._win._ready:
