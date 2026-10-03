@@ -72,6 +72,7 @@ from memory.config_manager     import (
     get_brief_enabled, get_media_resolution, get_proactive_audio_enabled,
     get_push_to_talk_enabled, get_thinking_enabled, get_turn_tuning, get_voice,
     get_wake_word_enabled, save_wake_word_enabled,    get_input_device, get_output_device,
+    get_language,
 )
 from core                     import gemini as _gemini
 from core.plugin_loader        import discover_plugins
@@ -997,7 +998,9 @@ class JarvisLive:
             f"[IDENTITY]\n"
             f"Your name is {self._asst_name}. "
             f"Always refer to yourself as {self._asst_name}.\n"
-            f"{_addr}\n\n"
+            f"{_addr}\n"
+            f"DEFAULT LANGUAGE: {get_language()}. Use it until the user has spoken "
+            f"in this session; after that, follow [LANGUAGE].\n\n"
         )
 
         # Everything the model is told about *itself* is derived here, not
@@ -1751,7 +1754,7 @@ class JarvisLive:
             e = identity.get(k, {})
             return (e.get("value", "") if isinstance(e, dict) else str(e)).strip()
 
-        lang = _val("language")
+        lang = _val("language") or get_language()
         name = _val("name")
         time_str = datetime.now().strftime("%H:%M")
 
@@ -1881,7 +1884,7 @@ class JarvisLive:
         memory = load_memory()
         lang_entry = memory.get("identity", {}).get("language", {})
         lang = (lang_entry.get("value", "") if isinstance(lang_entry, dict) else str(lang_entry)).strip()
-        lang = lang or "English"
+        lang = lang or get_language()
 
         convo = "\n".join(log[-40:])   # cap at last 40 turns to stay within token budget
         prompt = (
@@ -1937,7 +1940,7 @@ class JarvisLive:
                         alerts = await asyncio.to_thread(monitor_check_all)
                         memory = load_memory()
                         lang_e = memory.get("identity", {}).get("language", {})
-                        lang   = (lang_e.get("value", "") if isinstance(lang_e, dict) else str(lang_e)).strip() or "English"
+                        lang   = (lang_e.get("value", "") if isinstance(lang_e, dict) else str(lang_e)).strip() or get_language()
                         for alert in alerts:
                             msg = (
                                 f"{alert}\n\n"

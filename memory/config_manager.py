@@ -75,6 +75,18 @@ def save_assistant_config(assistant_name: str, user_name: str) -> None:
     CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
 
 
+# ── Language ─────────────────────────────────────────────────────────────────
+# English name of the language ("German", "English", …). It sets the HUD text
+# (see core/i18n.py) and the language JARVIS uses before the user has spoken —
+# the greeting, briefing and session summaries. Once the user talks, the reply
+# still follows whatever language they speak.
+DEFAULT_LANGUAGE = "German"
+
+
+def get_language() -> str:
+    return str(load_api_keys().get("language", DEFAULT_LANGUAGE) or DEFAULT_LANGUAGE).strip()
+
+
 # ── Assistant voice ──────────────────────────────────────────────────────────
 # Gemini Live prebuilt voices. Names are proper nouns — identical in every
 # language, so this list is safe to show verbatim in any locale.
