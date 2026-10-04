@@ -62,9 +62,33 @@ QLabel, QPushButton, QLineEdit = localize_widgets(QLabel, QPushButton, QLineEdit
 QPainter = localize_painter(QPainter)
 
 try:
+    from memory.config_manager import get_ui_scale
+    _UI_SCALE = get_ui_scale()
+except Exception:
+    _UI_SCALE = 1.0
+
+
+class _ScaledFont(QFont):
+    """Every explicit font in the HUD is built through here, so the single
+    TEXT SIZE setting resizes all of the interface's text at once."""
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        if (_UI_SCALE != 1.0 and len(args) >= 2 and isinstance(args[0], str)
+                and isinstance(args[1], (int, float)) and args[1] > 0):
+            self.setPointSizeF(args[1] * _UI_SCALE)
+
+
+QFont = _ScaledFont
+
+try:
     from core.avatar import HoloAvatar
 except Exception:      # pragma: no cover — HUD must never die over cosmetics
     HoloAvatar = None
+try:
+    from core.anime_avatar import AnimeAvatar
+except Exception:      # pragma: no cover
+    AnimeAvatar = None
 
 
 def _base_dir() -> Path:
@@ -427,6 +451,12 @@ class HudCanvas(QWidget):
                 self._avatar = HoloAvatar()
             except Exception:
                 self._avatar = None
+        self._anime = None
+        if AnimeAvatar is not None:
+            try:
+                self._anime = AnimeAvatar()
+            except Exception:
+                self._anime = None
 
         # Which centrepiece to draw. Read once here and changed live by the
         # settings toggle; the avatar object is kept either way so switching
@@ -473,11 +503,19 @@ class HudCanvas(QWidget):
         self._tmr.timeout.connect(self._step)
         self._tmr.start(16)
 
+    def _head(self):
+        """The face object the current HUD style draws, or None for the core."""
+        if self.hud_style == "anime" and self._anime is not None:
+            return self._anime
+        if self.hud_style in ("face", "anime"):
+            return self._avatar
+        return None
+
     def glance(self, dx: float, dy: float, hold: float = 1.1) -> None:
         """Ask the avatar to look somewhere for a moment (see HoloAvatar.glance)."""
         try:
             if self._avatar is not None:
-                self._avatar.glance(dx, dy, hold)
+                (self._head() or self._avatar).glance(dx, dy, hold)
         except Exception:
             pass
 
@@ -611,8 +649,9 @@ class HudCanvas(QWidget):
         # starts talking. Same lesson the head's sway taught.
         self._core_phase += min(0.10, max(0.0, dt))
 
-        if self._avatar is not None and self.hud_style == "face":
-            self._avatar.step(dt, amp, speaking=self.speaking,
+        _hd = self._head()
+        if _hd is not None:
+            _hd.step(dt, amp, speaking=self.speaking,
                               muted=self.muted, state=self.state,
                               v_open=v_open, v_wide=v_wide or 0.0,
                               v_level=v_level, v_seq=v_seq,
@@ -868,11 +907,12 @@ class HudCanvas(QWidget):
         # capped by width, so it fills the HUD at any window size — including
         # fullscreen — without ever colliding with the status text below.
         _sy_status = cy + fw * 0.40
-        if self._avatar is not None and self.hud_style == "face":
+        _hd = self._head()
+        if _hd is not None:
             _band_t = 12.0
             _band_h = max(60.0, _sy_status - 12.0 - _band_t)
-            _r_head = min(fw * 0.355, _band_h / (self._avatar.SPAN + 0.08))
-            _head_cy = _band_t + (_band_h - self._avatar.SPAN * _r_head) / 2.0 + _r_head
+            _r_head = min(fw * 0.355, _band_h / (_hd.SPAN + 0.08))
+            _head_cy = _band_t + (_band_h - _hd.SPAN * _r_head) / 2.0 + _r_head
 
             if self.muted:
                 _main = _acc = qcol(C.MUTED_C)
@@ -886,7 +926,7 @@ class HudCanvas(QWidget):
                     _acc = qcol(C.GREEN)
                 else:
                     _acc = qcol(C.PRI)
-            self._avatar.paint(p, cx, _head_cy, _r_head, _main, _acc, qcol(C.BG))
+            _hd.paint(p, cx, _head_cy, _r_head, _main, _acc, qcol(C.BG))
 
         # reactor core — the other centrepiece, and the fallback if the head
         # could not be built. There is no third path: the old face.png branch
@@ -1221,6 +1261,18 @@ class FileDropZone(QWidget):
         self.file_selected.emit(path)
 
 
+def _draw_fit(p, rect, flags, text) -> None:
+    """drawText that shrinks the font until `text` fits the rect's width, so
+    a larger TEXT SIZE never clips a fixed-width panel."""
+    f = p.font()
+    size = f.pointSizeF()
+    while size > 5 and p.fontMetrics().horizontalAdvance(_t(str(text))) > rect.width() - 6:
+        size -= 0.5
+        f.setPointSizeF(size)
+        p.setFont(f)
+    p.drawText(rect, flags, text)
+
+
 class _DropCanvas(QWidget):
     def __init__(self, zone: FileDropZone):
         super().__init__(zone)
@@ -1266,21 +1318,21 @@ class _DropCanvas(QWidget):
         p.drawLine(QPointF(cx - 14, cy + 4), QPointF(cx + 14, cy + 4))
         p.setFont(QFont("Courier New", 8))
         p.setPen(QPen(qcol(C.PRI_DIM if not hover else C.TEXT), 1))
-        p.drawText(QRectF(0, cy + 8, W, 16), Qt.AlignmentFlag.AlignCenter,
+        _draw_fit(p, QRectF(0, cy + 8, W, 16), Qt.AlignmentFlag.AlignCenter,
                    "Drop file here  or  Click to Browse")
         p.setFont(QFont("Courier New", 7))
         p.setPen(QPen(qcol("#1a4a5a"), 1))
-        p.drawText(QRectF(0, cy + 24, W, 14), Qt.AlignmentFlag.AlignCenter,
+        _draw_fit(p, QRectF(0, cy + 24, W, 14), Qt.AlignmentFlag.AlignCenter,
                    "Images · Video · Audio · PDF · Docs · Code · Data")
 
     def _paint_drag_over(self, p, W, H):
         cx, cy = W / 2, H / 2
         p.setFont(QFont("Courier New", 20))
         p.setPen(QPen(qcol(C.PRI), 1))
-        p.drawText(QRectF(0, cy - 24, W, 32), Qt.AlignmentFlag.AlignCenter, "⬇")
+        _draw_fit(p, QRectF(0, cy - 24, W, 32), Qt.AlignmentFlag.AlignCenter, "⬇")
         p.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
         p.setPen(QPen(qcol(C.PRI), 1))
-        p.drawText(QRectF(0, cy + 12, W, 16), Qt.AlignmentFlag.AlignCenter, "Release to load")
+        _draw_fit(p, QRectF(0, cy + 12, W, 16), Qt.AlignmentFlag.AlignCenter, "Release to load")
 
     def _paint_file(self, p, W, H):
         path = Path(self._z._current_file)
@@ -1292,7 +1344,7 @@ class _DropCanvas(QWidget):
         block_x, block_w = 10, 60
         p.setFont(QFont("Segoe UI Emoji", 22) if _OS == "Windows" else QFont("Arial", 22))
         p.setPen(QPen(qcol(icon_col), 1))
-        p.drawText(QRectF(block_x, 0, block_w, H), Qt.AlignmentFlag.AlignCenter, icon)
+        _draw_fit(p, QRectF(block_x, 0, block_w, H), Qt.AlignmentFlag.AlignCenter, icon)
 
         tx = block_x + block_w + 6
         tw = W - tx - 38
@@ -1300,12 +1352,12 @@ class _DropCanvas(QWidget):
         p.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
         p.setPen(QPen(qcol(C.WHITE), 1))
         name = path.name if len(path.name) <= 34 else path.name[:31] + "..."
-        p.drawText(QRectF(tx, H * 0.18, tw, 16),
+        _draw_fit(p, QRectF(tx, H * 0.18, tw, 16),
                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, name)
 
         p.setFont(QFont("Courier New", 7))
         p.setPen(QPen(qcol(C.TEXT_DIM), 1))
-        p.drawText(QRectF(tx, H * 0.18 + 18, tw, 14),
+        _draw_fit(p, QRectF(tx, H * 0.18 + 18, tw, 14),
                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                    f"{ext_str}  ·  {size_str}")
 
@@ -1313,12 +1365,12 @@ class _DropCanvas(QWidget):
         p.setPen(QPen(qcol("#1e5c6a"), 1))
         par = str(path.parent)
         if len(par) > 42: par = "…" + par[-41:]
-        p.drawText(QRectF(tx, H * 0.18 + 34, tw, 12),
+        _draw_fit(p, QRectF(tx, H * 0.18 + 34, tw, 12),
                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, par)
 
         p.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
         p.setPen(QPen(qcol(C.RED, 180), 1))
-        p.drawText(QRectF(W - 34, 0, 28, H), Qt.AlignmentFlag.AlignCenter, "✕")
+        _draw_fit(p, QRectF(W - 34, 0, 28, H), Qt.AlignmentFlag.AlignCenter, "✕")
 
     def mousePressEvent(self, e):
         z = self._z
@@ -2968,6 +3020,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._face_path = face_path
 
+        _app = QApplication.instance()
+        if _app is not None and _UI_SCALE != 1.0 and not _app.property("jarvis_scaled"):
+            _f = _app.font()
+            if _f.pointSizeF() > 0:
+                _f.setPointSizeF(_f.pointSizeF() * _UI_SCALE)
+                _app.setFont(_f)
+            _app.setProperty("jarvis_scaled", True)
+
         # Load customization from config
         _cfg = _read_full_config()
         self._assistant_name: str = (_cfg.get("assistant_name") or "JARVIS").strip()
@@ -4319,6 +4379,10 @@ class MainWindow(QMainWindow):
         self._hud_btn.clicked.connect(self._toggle_hud_style)
         self._refresh_hud_btn()
 
+        self._scale_btn = _row(QPushButton())
+        self._scale_btn.clicked.connect(self._cycle_ui_scale)
+        self._refresh_scale_btn()
+
         w.adjustSize()
         return w
 
@@ -5142,31 +5206,31 @@ class MainWindow(QMainWindow):
             else "Hold a key to talk instead of streaming the mic continuously.")
 
 
+    _HUD_TEXT = {"anime": "🌸  HUD: ANIME FACE",
+                 "face":  "🧑  HUD: ANIMATED FACE",
+                 "core":  "◉  HUD: REACTOR CORE"}
+    _HUD_NEXT = {"anime": "face", "face": "core", "core": "anime"}
+
     def _refresh_hud_btn(self):
         from memory.config_manager import get_hud_style
-        face = get_hud_style() == "face"
-        # Neither state is "off", so both read as active — this is a choice
-        # between two things, not a switch with a disabled side.
+        cur = get_hud_style()
+        # None of the styles is "off", so all read as active — this is a choice
+        # between things, not a switch with a disabled side.
         style = f"""
             QPushButton {{ background: {C.PANEL2}; color: {C.PRI};
                 border: 1px solid {C.BORDER_A}; border-radius: 3px;
                 text-align: left; padding: 0 8px; }}
             QPushButton:hover {{ color: {C.WHITE}; border: 1px solid {C.BORDER_B}; }}"""
-        self._hud_btn.setText("🧑  HUD: ANIMATED FACE" if face
-                              else "◉  HUD: REACTOR CORE")
+        self._hud_btn.setText(self._HUD_TEXT.get(cur, self._HUD_TEXT["anime"]))
         self._hud_btn.setStyleSheet(style)
-        self._hud_btn.setToolTip(
-            "An animated head that speaks your words and shows what JARVIS is "
-            "doing. Tap to switch to the reactor core."
-            if face else
-            "A reactor core that turns with the state and moves with your voice. "
-            "Tap to switch to the animated head.")
+        self._hud_btn.setToolTip("Tap to switch between anime face, holographic "
+                                 "head and reactor core.")
 
     def _toggle_hud_style(self):
-        """Swap the centrepiece. Both objects stay in memory, so the change is
+        """Cycle the centrepiece. All objects stay in memory, so the change is
         instant and switching back costs nothing."""
         from memory.config_manager import get_hud_style, save_hud_style
-        want = "core" if get_hud_style() == "face" else "face"
+        want = self._HUD_NEXT.get(get_hud_style(), "anime")
         save_hud_style(want)
         try:
             self.hud.hud_style = want
@@ -5174,9 +5238,24 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self._refresh_hud_btn()
-        self._log.append_log(
-            "SYS: HUD switched to the animated face." if want == "face"
-            else "SYS: HUD switched to the reactor core.")
+        self._log.append_log({"anime": "SYS: HUD switched to the anime face.",
+                              "face": "SYS: HUD switched to the animated face.",
+                              "core": "SYS: HUD switched to the reactor core."}[want])
+
+    def _refresh_scale_btn(self):
+        from memory.config_manager import get_ui_scale
+        self._scale_btn.setText(f"🔠  TEXT SIZE: {int(round(get_ui_scale() * 100))}%")
+        self._scale_btn.setStyleSheet(self._hud_btn.styleSheet())
+        self._scale_btn.setToolTip("Tap to change the size of all text. "
+                                   "Takes effect after a restart.")
+
+    def _cycle_ui_scale(self):
+        from memory.config_manager import UI_SCALES, get_ui_scale, save_ui_scale
+        cur = get_ui_scale()
+        i = UI_SCALES.index(cur) if cur in UI_SCALES else 0
+        save_ui_scale(UI_SCALES[(i + 1) % len(UI_SCALES)])
+        self._refresh_scale_btn()
+        self._log.append_log("SYS: Text size saved — restart JARVIS to apply it.")
 
     def _toggle_ptt(self):
         from memory.config_manager import (get_push_to_talk_enabled,

@@ -241,3 +241,13 @@ DE_PATTERNS.extend([
     (re.compile(r"^(" + "|".join(_DAYS) + r") (\d{2}) (" + "|".join(_MONTHS) + r") (\d{4})$"),
      lambda m: f"{_DAYS[m[1]]} {m[2]}. {_MONTHS[m[3]]} {m[4]}"),
 ])
+
+DE.update({
+    "🌸  HUD: ANIME FACE": "🌸  HUD: ANIME-GESICHT",
+    "SYS: HUD switched to the anime face.": "SYS: HUD zeigt jetzt das Anime-Gesicht.",
+    "SYS: HUD switched to the animated face.": "SYS: HUD zeigt jetzt das animierte Gesicht.",
+    "SYS: HUD switched to the reactor core.": "SYS: HUD zeigt jetzt den Reaktorkern.",
+    "SYS: Text size saved — restart JARVIS to apply it.":
+        "SYS: Schriftgröße gespeichert – wirkt nach einem Neustart von JARVIS.",
+})
+DE_PATTERNS.append((re.compile(r"^🔠  TEXT SIZE: (\d+)%$"), r"🔠  SCHRIFTGRÖSSE: \1 %"))
