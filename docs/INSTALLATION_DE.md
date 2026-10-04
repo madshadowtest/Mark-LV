@@ -95,6 +95,25 @@ Wenn ich etwas Neues für dich gebaut habe, bekommst du von mir einen Link zu ei
 
 ---
 
+## Jarvis mit Devin verbinden (optional)
+
+Damit kannst du Jarvis sagen, was programmiert werden soll, zum Beispiel:
+„Jarvis, sag Devin: Bau mir eine Wetteransage für morgens.“ Jarvis zeigt eine
+Rückfrage auf dem Bildschirm. Erst wenn du **BESTÄTIGEN** klickst, startet
+Devin. Das verbraucht Devin-Guthaben. Devin baut die Änderung und schickt dir
+einen Pull Request, den du wie gewohnt übernimmst.
+
+Einrichten (einmalig):
+1. Öffne in Devin **Settings → Devin API → PATs** und erstelle einen Token.
+   Kopiere ihn. **Den Token nie weitergeben**, auch nicht im Chat.
+2. In Jarvis: **⚙ → PLUGINS → DEVIN** öffnen. Trag den Token und deine
+   Organisations-ID ein (beginnt mit `org-`).
+3. Klick auf **VERBINDUNG TESTEN**. Erscheint „Verbindung zu Devin steht“,
+   ist alles bereit.
+
+Danach kannst du auch fragen: „Jarvis, wie weit ist Devin?“ oder
+„Jarvis, sag Devin zusätzlich: Die Ansage soll kürzer sein.“
+
 ## Wenn etwas nicht klappt
 
 | Problem | Lösung |
